@@ -693,6 +693,73 @@
             letter-spacing: 1px;
         }
 
+        /* Score gate */
+        .score-gate-msg {
+            text-align: center;
+            font-size: 14px;
+            color: #888;
+            margin-bottom: 16px;
+            line-height: 1.5;
+        }
+        .score-gate-msg .score-target {
+            color: #e0e0e0;
+            font-weight: bold;
+            font-size: 16px;
+        }
+
+        .lock-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+            margin: 16px 0;
+            transition: all 0.4s ease;
+        }
+        .lock-icon.locked {
+            filter: drop-shadow(0 0 12px #ef4444) drop-shadow(0 0 24px rgba(239,68,68,0.4));
+        }
+        .lock-icon.unlocked {
+            filter: drop-shadow(0 0 12px #4ade80) drop-shadow(0 0 24px rgba(74,222,128,0.4));
+            animation: unlockPulse 1.5s ease-in-out;
+        }
+        @keyframes unlockPulse {
+            0% { transform: scale(1); }
+            30% { transform: scale(1.3); }
+            60% { transform: scale(0.95); }
+            100% { transform: scale(1); }
+        }
+
+        .score-progress-bar {
+            height: 6px;
+            background: #1a1a1a;
+            border-radius: 3px;
+            overflow: hidden;
+            margin: 12px 0 6px;
+        }
+        .score-progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ef4444, #f97316, #4ade80);
+            border-radius: 3px;
+            transition: width 0.5s ease;
+            width: 0%;
+        }
+        .score-progress-label {
+            font-size: 10px;
+            color: #555;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* Locked textarea overlay */
+        .submit-box {
+            position: relative;
+        }
+        .submit-box.locked .submit-idea-area,
+        .submit-box.locked .submit-idea-btn {
+            pointer-events: none;
+            opacity: 0.15;
+        }
+
         .submit-idea-area {
             width: 100%;
             min-height: 70px;
@@ -737,6 +804,14 @@
             font-size: 11px;
             color: #4ade80;
             margin-top: 8px;
+            display: none;
+        }
+
+        .unlocked-msg {
+            text-align: center;
+            font-size: 12px;
+            color: #4ade80;
+            margin-bottom: 12px;
             display: none;
         }
 
@@ -1003,18 +1078,36 @@
             <!-- Growth Panel -->
             <div id="votingPanel">
                 <div class="panel-header">
-                    <h3>FEED THE GAME</h3>
+                    <h3>EVOLVE THE GAME</h3>
                     <span class="version-badge">v0.00</span>
                 </div>
-                <div class="vote-section-label">What should the game become?</div>
-                <textarea id="ideaInput" class="submit-idea-area" placeholder="e.g. Add a boss that spawns every 60 seconds..." maxlength="500"></textarea>
-                <button class="submit-idea-btn" id="submitIdeaBtn">SUBMIT IDEA</button>
+
+                <div class="score-gate-msg" id="scoreGateMsg">
+                    Score <span class="score-target">690</span> to unlock<br>the evolution engine
+                </div>
+
+                <div class="lock-icon locked" id="lockIcon">&#x1f512;</div>
+
+                <div class="score-progress-bar">
+                    <div class="score-progress-fill" id="scoreProgressFill"></div>
+                </div>
+                <div class="score-progress-label">
+                    <span id="scoreProgressCurrent">0</span>
+                    <span>690</span>
+                </div>
+
+                <div class="unlocked-msg" id="unlockedMsg">You earned this. Tell us what to build.</div>
+
+                <div class="submit-box locked" id="submitBox">
+                    <textarea id="ideaInput" class="submit-idea-area" placeholder="What should the game become next?" maxlength="500"></textarea>
+                    <button class="submit-idea-btn" id="submitIdeaBtn">SUBMIT IDEA</button>
+                </div>
                 <div class="submit-feedback" id="submitFeedback">Opening GitHub to submit your idea...</div>
                 <div class="recent-ideas" id="recentIdeas">
-                    <div class="recent-ideas-label">Recent ideas</div>
-                    <div id="recentIdeasList"><div class="recent-idea-item" style="color:#444;font-style:italic;">No ideas submitted yet. Be the first!</div></div>
+                    <div class="recent-ideas-label">Player ideas</div>
+                    <div id="recentIdeasList"><div class="recent-idea-item" style="color:#444;font-style:italic;">Play to unlock. Shape what comes next.</div></div>
                 </div>
-                <div style="font-size:9px;color:#444;text-align:center;margin-top:8px;font-style:italic;">we changed the game. now help us change it again.</div>
+                <div style="font-size:9px;color:#444;text-align:center;margin-top:12px;font-style:italic;">your ideas become code. the game evolves.</div>
 
                 <!-- Growth -->
                 <div class="growth-section">
@@ -1782,6 +1875,7 @@
 
         document.getElementById('hpDisplay').textContent = hpStr.trim();
         document.getElementById('scoreDisplay').textContent = score;
+        if (typeof updateScoreGate === 'function') updateScoreGate(score);
     }
 
     function updateXPBar() {
@@ -2063,6 +2157,8 @@
     // ==================== SUBMISSIONS ====================
     const GITHUB_REPO = 'cchops89/the-game';
     const IDEA_STORAGE_KEY = 'game_recent_ideas';
+    const UNLOCK_SCORE = 690;
+    let submissionUnlocked = false;
 
     function loadRecentIdeas() {
         try {
@@ -2078,7 +2174,8 @@
         const list = document.getElementById('recentIdeasList');
         const ideas = loadRecentIdeas();
         if (ideas.length === 0) {
-            list.innerHTML = '<div class="recent-idea-item" style="color:#444;font-style:italic;">No ideas submitted yet. Be the first!</div>';
+            list.innerHTML = '<div class="recent-idea-item" style="color:#444;font-style:italic;">' +
+                (submissionUnlocked ? 'No ideas yet. You\'re first!' : 'Play to unlock. Shape what comes next.') + '</div>';
             return;
         }
         list.innerHTML = ideas.map(idea =>
@@ -2086,31 +2183,50 @@
         ).join('');
     }
 
+    function updateScoreGate(currentScore) {
+        const fill = document.getElementById('scoreProgressFill');
+        const label = document.getElementById('scoreProgressCurrent');
+        const pct = Math.min(100, (currentScore / UNLOCK_SCORE) * 100);
+        fill.style.width = pct + '%';
+        label.textContent = currentScore;
+
+        if (!submissionUnlocked && currentScore >= UNLOCK_SCORE) {
+            submissionUnlocked = true;
+            // Unlock animation
+            const lock = document.getElementById('lockIcon');
+            lock.classList.remove('locked');
+            lock.classList.add('unlocked');
+            lock.innerHTML = '&#x1f513;';
+
+            document.getElementById('scoreGateMsg').innerHTML = '<span style="color:#4ade80;">UNLOCKED</span>';
+            document.getElementById('unlockedMsg').style.display = 'block';
+            document.getElementById('submitBox').classList.remove('locked');
+            renderRecentIdeas();
+        }
+    }
+
     document.getElementById('submitIdeaBtn').addEventListener('click', () => {
+        if (!submissionUnlocked) return;
         const input = document.getElementById('ideaInput');
         const text = input.value.trim();
         if (!text) { input.focus(); return; }
 
-        // Save locally
         const ideas = loadRecentIdeas();
         ideas.unshift({ text, ts: Date.now() });
         saveRecentIdeas(ideas);
         renderRecentIdeas();
 
-        // Open GitHub Issue
         const title = encodeURIComponent('[Submission] ' + text.slice(0, 80));
         const body = encodeURIComponent('## Player Submission\n\n' + text + '\n\n---\n*Submitted from the game page*');
         const url = 'https://github.com/' + GITHUB_REPO + '/issues/new?labels=submission&title=' + title + '&body=' + body;
         window.open(url, '_blank');
 
-        // Feedback
         const fb = document.getElementById('submitFeedback');
         fb.style.display = 'block';
         input.value = '';
         setTimeout(() => { fb.style.display = 'none'; }, 3000);
     });
 
-    // Allow Ctrl+Enter / Cmd+Enter to submit
     document.getElementById('ideaInput').addEventListener('keydown', e => {
         if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
             e.preventDefault();

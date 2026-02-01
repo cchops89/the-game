@@ -82,27 +82,35 @@ regen: 0
   - erupting: $5M+ (12h)
 - Growth panel displays: plant visual, tier name, MC bar, next milestone
 
+## Submission System
+- "FEED THE GAME" panel contains a textarea + SUBMIT IDEA button
+- Submissions open a pre-filled GitHub Issue on cchops89/the-game with the `submission` label
+- Recent ideas saved to localStorage (key: `game_recent_ideas`) and displayed in panel
+- Ctrl+Enter / Cmd+Enter shortcut to submit
+- Mutation bot (`mutate.js`) pulls open submission issues, processes them, closes after mutation
+
 ## Module Sizes (approximate line counts)
 | Module | Lines |
 |--------|-------|
-| HTML/CSS | ~1010 |
+| HTML/CSS | ~1055 |
 | CONFIG | ~33 |
-| SKETCH_HELPERS | ~88 |
-| CANVAS | ~4 |
+| SKETCH_HELPERS | ~87 |
+| CANVAS | ~3 |
 | STATE | ~74 |
-| INPUT | ~61 |
-| UPGRADES | ~42 |
-| PLAYER_UPDATE | ~42 |
-| ENEMIES | ~76 |
-| PROJECTILES | ~62 |
-| KILL/XP | ~58 |
-| PARTICLES | ~31 |
-| DRAW | ~157 |
-| HUD | ~21 |
-| GAME_OVER | ~26 |
-| AUDIO | ~127 |
-| DEXSCREENER+GROWTH | ~70 |
-| GAME_LOOP | ~23 |
-| START/RESTART | ~24 |
-| INIT | ~7 |
-| **Total** | **~2044** |
+| INPUT | ~60 |
+| UPGRADES | ~41 |
+| PLAYER_UPDATE | ~41 |
+| ENEMIES | ~75 |
+| PROJECTILES | ~61 |
+| KILL/XP | ~57 |
+| PARTICLES | ~30 |
+| DRAW | ~156 |
+| HUD | ~20 |
+| GAME_OVER | ~25 |
+| AUDIO | ~126 |
+| DEXSCREENER+GROWTH | ~69 |
+| GAME_LOOP | ~22 |
+| START/RESTART | ~23 |
+| SUBMISSIONS | ~59 |
+| INIT | ~6 |
+| **Total** | **~2133** |
