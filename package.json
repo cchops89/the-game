@@ -1,0 +1,16 @@
+{
+  "name": "arena-survivor-game",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "mutate": "node mutate.js",
+    "mutate:dry": "node mutate.js --dry-run"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.72.1"
+  }
+}
