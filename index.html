@@ -693,35 +693,70 @@
             letter-spacing: 1px;
         }
 
-        .vote-option {
-            margin-bottom: 14px;
-        }
-
-        .vote-title {
+        .submit-idea-area {
+            width: 100%;
+            min-height: 70px;
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 6px;
+            color: #ccc;
+            font-family: inherit;
             font-size: 13px;
-            margin-bottom: 6px;
-            color: #bbb;
+            padding: 10px;
+            resize: vertical;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+        }
+        .submit-idea-area:focus {
+            outline: none;
+            border-color: #4ade80;
+        }
+        .submit-idea-area::placeholder {
+            color: #444;
         }
 
-        .vote-bar {
-            height: 8px;
-            background: #222;
-            border-radius: 4px;
-            overflow: hidden;
-            margin-bottom: 4px;
-        }
-
-        .vote-bar-fill {
-            height: 100%;
+        .submit-idea-btn {
+            width: 100%;
+            padding: 10px 0;
             background: linear-gradient(90deg, #4ade80, #22c55e);
-            border-radius: 4px;
-            opacity: 0.6;
+            color: #000;
+            font-weight: bold;
+            font-size: 13px;
+            letter-spacing: 1px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            text-transform: uppercase;
+        }
+        .submit-idea-btn:hover {
+            opacity: 0.85;
         }
 
-        .vote-percentage {
+        .submit-feedback {
+            text-align: center;
             font-size: 11px;
-            color: #666;
-            text-align: right;
+            color: #4ade80;
+            margin-top: 8px;
+            display: none;
+        }
+
+        .recent-ideas {
+            margin-top: 14px;
+            padding-top: 12px;
+            border-top: 1px solid #222;
+        }
+        .recent-ideas-label {
+            font-size: 10px;
+            color: #555;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 8px;
+        }
+        .recent-idea-item {
+            font-size: 12px;
+            color: #777;
+            padding: 4px 0;
+            border-bottom: 1px solid #1a1a1a;
         }
 
         .vote-timer {
@@ -972,23 +1007,13 @@
                     <span class="version-badge">v0.00</span>
                 </div>
                 <div class="vote-section-label">What should the game become?</div>
-                <div class="vote-option">
-                    <div class="vote-title">New enemy type: Bosses</div>
-                    <div class="vote-bar"><div class="vote-bar-fill" style="width:38%"></div></div>
-                    <div class="vote-percentage">38%</div>
+                <textarea id="ideaInput" class="submit-idea-area" placeholder="e.g. Add a boss that spawns every 60 seconds..." maxlength="500"></textarea>
+                <button class="submit-idea-btn" id="submitIdeaBtn">SUBMIT IDEA</button>
+                <div class="submit-feedback" id="submitFeedback">Opening GitHub to submit your idea...</div>
+                <div class="recent-ideas" id="recentIdeas">
+                    <div class="recent-ideas-label">Recent ideas</div>
+                    <div id="recentIdeasList"><div class="recent-idea-item" style="color:#444;font-style:italic;">No ideas submitted yet. Be the first!</div></div>
                 </div>
-                <div class="vote-option">
-                    <div class="vote-title">Add multiplayer</div>
-                    <div class="vote-bar"><div class="vote-bar-fill" style="width:35%"></div></div>
-                    <div class="vote-percentage">35%</div>
-                </div>
-                <div class="vote-option">
-                    <div class="vote-title">Change the art style</div>
-                    <div class="vote-bar"><div class="vote-bar-fill" style="width:27%"></div></div>
-                    <div class="vote-percentage">27%</div>
-                </div>
-                <div class="vote-timer">Votes close in: 23h 14m</div>
-                <div class="vote-stats">142 votes cast</div>
                 <div style="font-size:9px;color:#444;text-align:center;margin-top:8px;font-style:italic;">we changed the game. now help us change it again.</div>
 
                 <!-- Growth -->
@@ -2034,6 +2059,66 @@
     canvas.addEventListener('touchstart', e => {
         if (gameState === 'menu') { e.preventDefault(); startGame(); }
     }, { passive: false });
+
+    // ==================== SUBMISSIONS ====================
+    const GITHUB_REPO = 'cchops89/the-game';
+    const IDEA_STORAGE_KEY = 'game_recent_ideas';
+
+    function loadRecentIdeas() {
+        try {
+            return JSON.parse(localStorage.getItem(IDEA_STORAGE_KEY)) || [];
+        } catch { return []; }
+    }
+
+    function saveRecentIdeas(ideas) {
+        localStorage.setItem(IDEA_STORAGE_KEY, JSON.stringify(ideas.slice(0, 10)));
+    }
+
+    function renderRecentIdeas() {
+        const list = document.getElementById('recentIdeasList');
+        const ideas = loadRecentIdeas();
+        if (ideas.length === 0) {
+            list.innerHTML = '<div class="recent-idea-item" style="color:#444;font-style:italic;">No ideas submitted yet. Be the first!</div>';
+            return;
+        }
+        list.innerHTML = ideas.map(idea =>
+            '<div class="recent-idea-item">' + idea.text.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</div>'
+        ).join('');
+    }
+
+    document.getElementById('submitIdeaBtn').addEventListener('click', () => {
+        const input = document.getElementById('ideaInput');
+        const text = input.value.trim();
+        if (!text) { input.focus(); return; }
+
+        // Save locally
+        const ideas = loadRecentIdeas();
+        ideas.unshift({ text, ts: Date.now() });
+        saveRecentIdeas(ideas);
+        renderRecentIdeas();
+
+        // Open GitHub Issue
+        const title = encodeURIComponent('[Submission] ' + text.slice(0, 80));
+        const body = encodeURIComponent('## Player Submission\n\n' + text + '\n\n---\n*Submitted from the game page*');
+        const url = 'https://github.com/' + GITHUB_REPO + '/issues/new?labels=submission&title=' + title + '&body=' + body;
+        window.open(url, '_blank');
+
+        // Feedback
+        const fb = document.getElementById('submitFeedback');
+        fb.style.display = 'block';
+        input.value = '';
+        setTimeout(() => { fb.style.display = 'none'; }, 3000);
+    });
+
+    // Allow Ctrl+Enter / Cmd+Enter to submit
+    document.getElementById('ideaInput').addEventListener('keydown', e => {
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            document.getElementById('submitIdeaBtn').click();
+        }
+    });
+
+    renderRecentIdeas();
 
     // ==================== INIT ====================
     setupTouch();

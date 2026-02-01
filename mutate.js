@@ -7,7 +7,9 @@ const Anthropic = require('@anthropic-ai/sdk').default;
 
 // ── CLI flags ──────────────────────────────────────────────
 const DRY_RUN = process.argv.includes('--dry-run');
+const COLLECT_ONLY = process.argv.includes('--collect');
 const ROOT = __dirname;
+const GITHUB_REPO = 'cchops89/the-game';
 
 const FILES = {
   dna:         path.join(ROOT, 'GAME-DNA.md'),
@@ -36,10 +38,95 @@ const SECTION_MAP = {
   'DEXSCREENER_GROWTH':  'DEXSCREENER + GROWTH SYSTEM',
   'GAME_LOOP':           'GAME LOOP',
   'START_RESTART':       'START / RESTART',
+  'SUBMISSIONS':         'SUBMISSIONS',
   'INIT':                'INIT',
 };
 
 const SECTION_BANNER_RE = /^\s*\/\/ =+ (.+?) =+\s*$/;
+
+// ── GitHub Issues collector ────────────────────────────────
+function findGh() {
+  const locations = [
+    path.join(process.env.HOME || '', 'bin', 'gh'),
+    '/usr/local/bin/gh',
+    'gh',
+  ];
+  for (const loc of locations) {
+    try {
+      execSync(`${loc} --version`, { stdio: 'pipe' });
+      return loc;
+    } catch {}
+  }
+  return null;
+}
+
+function collectSubmissions() {
+  const gh = findGh();
+  if (!gh) {
+    console.error('Error: gh CLI not found. Install it: https://cli.github.com');
+    process.exit(1);
+  }
+
+  console.log(`  Fetching issues labeled "submission" from ${GITHUB_REPO}...`);
+
+  let issuesJson;
+  try {
+    issuesJson = execSync(
+      `${gh} issue list --repo ${GITHUB_REPO} --label submission --state open --json number,title,body --limit 50`,
+      { cwd: ROOT, stdio: 'pipe' }
+    ).toString();
+  } catch (err) {
+    console.error('Error fetching issues:', err.message);
+    process.exit(1);
+  }
+
+  const issues = JSON.parse(issuesJson);
+  if (issues.length === 0) {
+    console.log('  No open submission issues found.');
+    process.exit(0);
+  }
+
+  console.log(`  Found ${issues.length} submission(s).`);
+
+  // Extract the actual submission text from the body
+  const submissions = issues.map((issue) => {
+    // Body format: "## Player Submission\n\n<text>\n\n---\n*Submitted from...*"
+    let text = (issue.body || '').replace(/^## Player Submission\s*/i, '').replace(/\n---\n\*Submitted from.*\*/s, '').trim();
+    if (!text) text = issue.title.replace(/^\[Submission\]\s*/i, '');
+    return { number: issue.number, text };
+  });
+
+  // Write to submissions.md
+  const content = [
+    '# Player Submissions',
+    `<!-- Collected from GitHub Issues on ${new Date().toISOString().split('T')[0]} -->`,
+    '',
+    ...submissions.map((s) => `- ${s.text} (#${s.number})`),
+    '',
+  ].join('\n');
+
+  fs.writeFileSync(FILES.submissions, content, 'utf-8');
+  console.log(`  Written ${submissions.length} submissions to submissions.md`);
+
+  return submissions.map((s) => s.number);
+}
+
+function closeSubmissionIssues(issueNumbers) {
+  const gh = findGh();
+  if (!gh) return;
+
+  console.log(`  Closing ${issueNumbers.length} processed submission issue(s)...`);
+  for (const num of issueNumbers) {
+    try {
+      execSync(
+        `${gh} issue close ${num} --repo ${GITHUB_REPO} --comment "Processed in this mutation. Thanks for the idea!"`,
+        { cwd: ROOT, stdio: 'pipe' }
+      );
+    } catch {
+      console.warn(`  Warning: could not close issue #${num}`);
+    }
+  }
+}
 
 // ── Tool schema for Claude ─────────────────────────────────
 const MUTATION_TOOL = {
@@ -129,7 +216,6 @@ function parseIntoSections(html) {
     }
   }
 
-  // If we never hit </script> (shouldn't happen), close last section
   if (currentSection) sections.push(currentSection);
 
   return { preScriptLines, sections, postScriptLines };
@@ -175,18 +261,15 @@ function validate(html) {
   if (!html.includes('</script>')) errors.push('Missing </script> tag');
   if (!html.includes('</html>')) errors.push('Missing </html> tag');
 
-  // Check all section banners still present
   for (const bannerName of Object.values(SECTION_MAP)) {
     if (!html.includes(bannerName)) {
       errors.push(`Missing section banner: "${bannerName}"`);
     }
   }
 
-  // Line count
   const lineCount = html.split('\n').length;
   if (lineCount > 4000) errors.push(`File too large: ${lineCount} lines (max 4000)`);
 
-  // Simple brace balance inside <script>
   const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
   if (scriptMatch) {
     const js = scriptMatch[1];
@@ -214,12 +297,31 @@ function gitCommit(version, summary) {
   }
 }
 
+function gitPush() {
+  try {
+    execSync('git push', { cwd: ROOT, stdio: 'pipe' });
+    console.log('  Pushed to remote.');
+  } catch {
+    console.warn('  Warning: git push failed. Push manually when ready.');
+  }
+}
+
 // ── Main ───────────────────────────────────────────────────
 async function main() {
   console.log(`\n$GAME Mutation Bot ${DRY_RUN ? '(DRY RUN)' : ''}`);
   console.log('─'.repeat(50));
 
-  // 1. Read & validate files
+  // Collect submissions from GitHub Issues
+  let issueNumbers = [];
+  if (!fs.existsSync(FILES.submissions) || process.argv.includes('--collect') || process.argv.includes('--github')) {
+    issueNumbers = collectSubmissions();
+    if (COLLECT_ONLY) {
+      console.log('  Done. Run `npm run mutate` to process them.');
+      process.exit(0);
+    }
+  }
+
+  // Read & validate files
   for (const [name, filePath] of Object.entries(FILES)) {
     if (!fs.existsSync(filePath)) {
       console.error(`Error: ${name} not found at ${filePath}`);
@@ -232,13 +334,12 @@ async function main() {
   const submissionsContent = fs.readFileSync(FILES.submissions, 'utf-8');
   const indexHtml = fs.readFileSync(FILES.index, 'utf-8');
 
-  // Check submissions has actual content (not just the template header)
   const submissionLines = submissionsContent
     .split('\n')
     .filter((l) => l.trim() && !l.startsWith('#') && !l.startsWith('<!--'));
   if (submissionLines.length === 0) {
-    console.error('Error: No submissions found in submissions.md');
-    console.error('Add player submissions (one per line) and run again.');
+    console.error('Error: No submissions found.');
+    console.error('  Either add ideas to submissions.md or run with --collect to pull from GitHub Issues.');
     process.exit(1);
   }
 
@@ -246,14 +347,14 @@ async function main() {
   console.log(`  Current version: v${currentVersion}`);
   console.log(`  Submissions: ${submissionLines.length} line(s)`);
 
-  // 2. Verify API key
+  // Verify API key
   if (!process.env.ANTHROPIC_API_KEY) {
     console.error('Error: ANTHROPIC_API_KEY environment variable not set.');
     console.error('  export ANTHROPIC_API_KEY=sk-ant-...');
     process.exit(1);
   }
 
-  // 3. Call Claude API
+  // Call Claude API
   const model = process.env.MUTATE_MODEL || 'claude-sonnet-4-20250514';
   console.log(`  Model: ${model}`);
   console.log('  Calling Claude API...');
@@ -286,7 +387,7 @@ async function main() {
     process.exit(1);
   }
 
-  // 4. Extract mutation
+  // Extract mutation
   const toolBlock = response.content.find((b) => b.type === 'tool_use');
   if (!toolBlock) {
     console.error('Error: Claude did not return a tool_use block.');
@@ -301,7 +402,7 @@ async function main() {
   console.log(`    Changelog: ${mutation.changelog}`);
   console.log(`    Sections modified: ${mutation.sectionChanges.map((s) => s.sectionName).join(', ')}`);
 
-  // 5. Apply in-memory
+  // Apply in-memory
   let newHtml;
   try {
     newHtml = applySectionChanges(indexHtml, mutation.sectionChanges);
@@ -311,7 +412,7 @@ async function main() {
     process.exit(1);
   }
 
-  // 6. Validate
+  // Validate
   const errors = validate(newHtml);
   if (errors.length > 0) {
     console.error('\n  Validation errors:');
@@ -325,7 +426,7 @@ async function main() {
   const newLineCount = newHtml.split('\n').length;
   console.log(`\n  Result: ${newLineCount} lines (${errors.length === 0 ? 'valid' : 'ERRORS'})`);
 
-  // 7. Dry run → exit
+  // Dry run → exit
   if (DRY_RUN) {
     console.log('\n  DRY RUN — no files were modified.');
     console.log('\n  Section details:');
@@ -336,14 +437,14 @@ async function main() {
     process.exit(0);
   }
 
-  // 8. Archive if MAJOR
+  // Archive if MAJOR
   if (mutation.versionType === 'MAJOR') {
     const archivePath = path.join(ROOT, 'versions', `v${currentVersion}.html`);
     fs.copyFileSync(FILES.index, archivePath);
     console.log(`  Archived: ${archivePath}`);
   }
 
-  // 9. Backup + write
+  // Backup + write
   const bakPath = FILES.index + '.bak';
   fs.copyFileSync(FILES.index, bakPath);
 
@@ -359,11 +460,16 @@ async function main() {
     process.exit(1);
   }
 
-  // Clean up backup
   fs.unlinkSync(bakPath);
 
-  // 10. Git commit
+  // Git commit + push
   gitCommit(mutation.versionNumber, mutation.summary);
+  gitPush();
+
+  // Close processed GitHub Issues
+  if (issueNumbers.length > 0) {
+    closeSubmissionIssues(issueNumbers);
+  }
 
   console.log('\n  Mutation applied successfully.');
   console.log(`  ${mutation.changelog}`);

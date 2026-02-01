@@ -3,8 +3,9 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "mutate": "node mutate.js",
-    "mutate:dry": "node mutate.js --dry-run"
+    "mutate": "node mutate.js --github",
+    "mutate:dry": "node mutate.js --github --dry-run",
+    "collect": "node mutate.js --collect"
   },
   "keywords": [],
   "author": "",
